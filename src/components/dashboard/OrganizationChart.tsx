@@ -4,6 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Crown, User, Edit3, Move } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+
+interface Props {
+  view?: "all" | "my" | "company";
+  onChangeView?: (v: "all" | "my" | "company") => void;
+}
 
 interface TeamMember {
   id: string;
@@ -18,19 +24,22 @@ interface TeamMember {
 
 const mockTeamData: TeamMember[] = [
   // Level 0: CEO
-  { id: "ceo", name: "CEO", role: "CEO", department: "Executive", progress: 85, avatar: "CO", level: 0 },
+  { id: "ceo-1", name: "Alex Riley", role: "CEO", department: "Executive", progress: 85, avatar: "AR", level: 0 },
 
   // Level 1: Direct reports to CEO
-  { id: "manager", name: "Manager", role: "Manager", department: "Operations", progress: 70, avatar: "M", level: 1, parentId: "ceo" },
-  { id: "finance", name: "Finance", role: "Finance", department: "Finance", progress: 60, avatar: "F", level: 1, parentId: "ceo" },
-  { id: "hr", name: "HR", role: "HR", department: "HR", progress: 65, avatar: "HR", level: 1, parentId: "ceo" },
-  { id: "user", name: "User", role: "User", department: "General", progress: 50, avatar: "U", level: 1, parentId: "ceo" },
+  { id: "manager-1", name: "Jane Doe", role: "Manager", department: "Operations", progress: 70, avatar: "JD", level: 1, parentId: "ceo-1" },
+  { id: "finance-1", name: "Finance", role: "Finance", department: "Finance", progress: 60, avatar: "F", level: 1, parentId: "ceo-1" },
+  { id: "hr-1", name: "Susan Reid", role: "HR", department: "HR", progress: 65, avatar: "SR", level: 1, parentId: "ceo-1" },
+  // Users report to manager-1 to reflect org relationships
+  { id: "user-1", name: "John Smith", role: "User", department: "General", progress: 50, avatar: "JS", level: 1, parentId: "manager-1" },
+  { id: "user-2", name: "Peter Jones", role: "User", department: "General", progress: 48, avatar: "PJ", level: 1, parentId: "manager-1" },
 ];
 
-export function OrganizationChart() {
+export function OrganizationChart({ view = "all", onChangeView }: Props) {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamData);
   const [draggedMember, setDraggedMember] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const { user } = useAuth();
 
   const handleDragStart = (e: React.DragEvent, memberId: string) => {
     if (!isEditMode) return;
@@ -73,8 +82,29 @@ export function OrganizationChart() {
     return "bg-danger-light";
   };
 
-  const ceo = teamMembers.find(m => m.level === 0);
-  const managers = teamMembers.filter(m => m.level === 1);
+  // Filter members based on selected view and logged-in user
+  const currentUserId = (user as any)?.id as string | undefined;
+  const base = teamMembers;
+  const isDescendantOf = (member: TeamMember, ancestorId: string): boolean => {
+    let pid = member.parentId;
+    while (pid) {
+      if (pid === ancestorId) return true;
+      const parent = base.find(m => m.id === pid);
+      pid = parent?.parentId;
+    }
+    return false;
+  };
+  let viewMembers: TeamMember[] = base;
+  if (view === "company") {
+    viewMembers = base.filter(m => m.id === "ceo-1" || isDescendantOf(m, "ceo-1"));
+  } else if (view === "my" && currentUserId) {
+    // Show me and my direct reports; CEO sees all
+    if (currentUserId === "ceo-1") viewMembers = base;
+    else viewMembers = base.filter(m => m.id === currentUserId || m.parentId === currentUserId);
+  }
+
+  const ceo = viewMembers.find(m => m.level === 0 || m.id === "ceo-1");
+  const managers = viewMembers.filter(m => m.level === 1 && (m.parentId === "ceo-1" || view !== "company"));
 
   // Simplified connector approach - use CSS positioning
   const managersRef = useRef<HTMLDivElement | null>(null);
@@ -88,14 +118,40 @@ export function OrganizationChart() {
         </div>
         
         <div className="flex items-center gap-3">
-          <Button 
+          {/* Segmented control */}
+          <div className="inline-flex rounded-md overflow-hidden border border-card-border">
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${view === "all" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+              onClick={() => onChangeView?.("all")}
+            >
+              All OKRs
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-sm font-medium transition-colors border-l border-card-border ${view === "my" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+              onClick={() => onChangeView?.("my")}
+            >
+              My OKRs
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-sm font-medium transition-colors border-l border-card-border ${view === "company" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+              onClick={() => onChangeView?.("company")}
+            >
+              Company OKRs
+            </button>
+          </div>
+
+          {/* Icon-only Edit toggle */}
+          <Button
             variant={isEditMode ? "default" : "outline"}
-            size="sm"
+            size="icon"
             onClick={() => setIsEditMode(!isEditMode)}
-            className="gap-2"
+            aria-label="Edit Chart"
+            title={isEditMode ? "Exit Edit" : "Edit Chart"}
           >
             {isEditMode ? <Move className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
-            {isEditMode ? "Exit Edit" : "Edit Chart"}
           </Button>
         </div>
       </div>
@@ -193,6 +249,21 @@ export function OrganizationChart() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Users under this manager */}
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                {viewMembers.filter(child => child.parentId === member.id && child.role.toLowerCase() === 'user').map(child => (
+                  <div key={child.id} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gray-400 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                      {child.avatar}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{child.name}</div>
+                      <div className="text-xs text-gray-500 truncate">{child.department}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}

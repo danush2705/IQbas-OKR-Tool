@@ -1,17 +1,12 @@
 import React, { createContext, useContext, useState } from "react";
 import { mockLogin, mockLogout } from "@/services/authService";
-
-export type UserRole = "ceo" | "manager" | "user";
-export interface AuthUser {
-  name: string;
-  role: UserRole;
-  email?: string;
-}
+import type { AuthUser } from "@/services/authService";
 
 interface AuthContextType {
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  updateUserRole: (id: string, role: AuthUser["role"]) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -37,8 +32,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
+  const updateUserRole = (id: string, role: AuthUser["role"]) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      if (prev.id !== id) return prev;
+      // Keep admin flag as-is (this can be managed via a dedicated admin switch elsewhere)
+      return { ...prev, role } as AuthUser;
+    });
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUserRole }}>
       {children}
     </AuthContext.Provider>
   );

@@ -10,7 +10,15 @@ import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 import LoginPage from "./pages/LoginPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import AdminRoute from "./components/auth/AdminRoute";
+import SettingsUserManagement from "./pages/SettingsUserManagement";
+import SettingsPage from "./pages/SettingsPage";
+import SettingsProfile from "./pages/SettingsProfile";
+import SettingsOrganization from "./pages/SettingsOrganization";
+import SettingsExport from "./pages/SettingsExport";
+import DocumentationPage from "./pages/DocumentationPage";
 import { AuthProvider } from "./context/AuthContext";
+import AppShell from "@/components/layout/AppShell";
 
 const queryClient = new QueryClient();
 
@@ -24,10 +32,22 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedRoute /> }>
-              <Route path="/" element={<Index />} />
-              <Route path="/okrs" element={<OKRs />} />
-              <Route path="/organization" element={<Organization />} />
-              <Route path="/reports" element={<Reports />} />
+              <Route element={<AppShell /> }>
+                <Route path="/" element={<Index />} />
+                <Route path="/okrs" element={<OKRs />} />
+                <Route path="/organization" element={<Organization />} />
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/documentation" element={<DocumentationPage />} />
+                {/* Unified settings hub */}
+                <Route path="/settings" element={<SettingsPage /> }>
+                  <Route path="profile" element={<SettingsProfile />} />
+                  <Route element={<AdminRoute /> }>
+                    <Route path="organization" element={<SettingsOrganization />} />
+                    <Route path="export" element={<SettingsExport />} />
+                    <Route path="user-management" element={<SettingsUserManagement />} />
+                  </Route>
+                </Route>
+              </Route>
             </Route>
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

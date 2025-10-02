@@ -122,11 +122,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     <p className="text-sm text-muted-foreground">{user?.role}</p>
                   </div>
                   
-                  <DropdownMenuItem className="gap-2 cursor-pointer">
+                  <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => navigate('/settings/profile')}>
                     <User className="w-4 h-4" />
                     Profile Settings
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="gap-2 cursor-pointer">
+                  <DropdownMenuItem className="gap-2 cursor-pointer" onClick={() => navigate('/settings/organization')}>
                     <Settings className="w-4 h-4" />
                     System Settings
                   </DropdownMenuItem>

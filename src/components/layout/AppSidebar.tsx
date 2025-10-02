@@ -31,14 +31,14 @@ const mainNavigation = [
 ];
 
 const managementNavigation = [
-  { title: "Team Management", url: "/team", icon: Users },
-  { title: "Time Periods", url: "/periods", icon: Calendar },
-  { title: "Export Data", url: "/export", icon: Download },
+  { title: "Team Management", url: "/settings/user-management", icon: Users },
+  { title: "Time Periods", url: "/settings/organization", icon: Calendar },
+  { title: "Export Data", url: "/settings/export", icon: Download },
 ];
 
 const systemNavigation = [
-  { title: "Documentation", url: "/docs", icon: FileText },
-  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Documentation", url: "/documentation", icon: FileText },
+  { title: "Settings", url: "/settings/organization", icon: Settings },
 ];
 
 export function AppSidebar() {

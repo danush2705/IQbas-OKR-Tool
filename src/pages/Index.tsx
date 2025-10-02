@@ -1,20 +1,34 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { useMemo, useState } from "react";
 import { MetricsCards } from "@/components/dashboard/MetricsCards";
 import { OrganizationChart } from "@/components/dashboard/OrganizationChart";
 import { OKRTable } from "@/components/dashboard/OKRTable";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { objectivesData } from "@/data/objectives";
+import { objectives as mockObjectives } from "@/data/mockData";
+import { useAuth } from "@/context/AuthContext";
 import { CheckCircle2, Target, TrendingUp } from "lucide-react";
 
 const Index = () => {
-  // Summary metrics based on objectivesData
-  const totalObjectives = objectivesData.length;
-  const achievedObjectives = objectivesData.filter((obj) => obj.status === "achieved").length;
-  const totalPossibleScore = objectivesData.reduce((sum, obj) => sum + (obj.totalScore || 0), 0);
-  const totalActualScore = objectivesData.reduce((sum, obj) => sum + (obj.actualScore || 0), 0);
+  const [view, setView] = useState<"all" | "my" | "company">("all");
+  const { user } = useAuth();
+
+  // Derive filtered objectives according to selected view
+  const filteredObjectives = useMemo(() => {
+    const ceoId = "ceo-1";
+    return mockObjectives.filter((o) => {
+      if (view === "all") return true;
+      if (view === "company") return o.owner === ceoId;
+      if (view === "my") return o.owner === (user as any)?.id;
+      return true;
+    });
+  }, [view, user]);
+
+  // Summary metrics based on filtered objectives
+  const totalObjectives = filteredObjectives.length;
+  const achievedObjectives = filteredObjectives.filter((obj) => obj.status === "achieved").length;
+  const totalPossibleScore = filteredObjectives.reduce((sum, obj) => sum + (obj.totalScore || 0), 0);
+  const totalActualScore = filteredObjectives.reduce((sum, obj) => sum + (obj.actualScore || 0), 0);
   const overallProgress = totalPossibleScore > 0 ? Math.round((totalActualScore / totalPossibleScore) * 100) : 0;
   return (
-    <DashboardLayout>
       <div className="space-y-8 fade-in">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -49,12 +63,11 @@ const Index = () => {
         <MetricsCards />
         
         {/* Organization Chart */}
-        <OrganizationChart />
+        <OrganizationChart view={view} onChangeView={setView} />
         
         {/* OKR Table */}
-        <OKRTable />
+        <OKRTable view={view} />
       </div>
-    </DashboardLayout>
   );
 };
 

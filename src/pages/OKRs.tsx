@@ -1,4 +1,3 @@
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Target, CheckCircle2, TrendingUp } from "lucide-react";
 import { OKRTable } from "@/components/dashboard/OKRTable";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -12,7 +11,6 @@ export default function OKRs() {
   const totalActualScore = objectivesData.reduce((sum, obj) => sum + (obj.actualScore || 0), 0);
   const overallProgress = totalPossibleScore > 0 ? Math.round((totalActualScore / totalPossibleScore) * 100) : 0;
   return (
-    <DashboardLayout>
       <div className="space-y-8 fade-in">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center">
@@ -40,6 +38,5 @@ export default function OKRs() {
         {/* Objectives Table with Filters/Actions */}
         <OKRTable />
       </div>
-    </DashboardLayout>
   );
 }

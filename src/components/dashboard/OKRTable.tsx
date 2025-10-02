@@ -7,9 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { CSVLink } from "react-csv";
 import { generateExportData } from "@/utils/exportUtils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
+import RequestObjectiveModal from "@/components/dashboard/RequestObjectiveModal";
+import { objectives as seedObjectives, orgChartUsers, type Objective, type KeyResult, type Milestone, type Attachment } from "@/data/mockData";
+import { getStatusBorder } from "@/utils/statusColor";
+import { canCreateObjective, canRequestObjective, canAddMilestone, canUpdateMilestone } from "@/services/permissions";
 import { 
   Select,
   SelectContent,
@@ -17,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Table,
   TableBody,
@@ -25,8 +28,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
-import { Doughnut } from "react-chartjs-2";
 import { 
   Search, 
   Filter, 
@@ -39,84 +40,48 @@ import {
   TrendingUp
 } from "lucide-react";
 
-interface OKRData {
-  id: string;
-  title: string;
-  owner: string;
-  status: "achieved" | "in-progress" | "not-achieved" | "pending";
-  progress: number;
-  target: number;
-  actual: number;
-  totalScore: number;
-  plannedScore: number;
-  actualScore: number;
-  startDate: string;
-  endDate: string;
-  department: string;
-}
+// Use centralized mock data (objectives with KRs and milestones)
+type FlatOKR = {
+  id: string; title: string; owner: string; status: "achieved" | "in-progress" | "not-achieved" | "pending";
+  progress: number; target: number; actual: number; totalScore: number; plannedScore: number; actualScore: number;
+  startDate: string; endDate: string; department: string;
+  ref: Objective;
+};
 
-const mockOKRData: OKRData[] = [
-  {
-    id: "1",
-    title: "Launch New Marketing Campaign to Increase Brand Awareness",
-    owner: "John Doe",
-    status: "in-progress",
-    progress: 68,
-    target: 100,
-    actual: 68,
-    totalScore: 42,
-    plannedScore: 45.5,
-    actualScore: 40.2,
-    startDate: "15-May-25",
-    endDate: "30-Sep-25",
-    department: "Marketing"
-  },
-  {
-    id: "2",
-    title: "Enhance Customer Satisfaction and Retention Rates",
-    owner: "John Doe",
-    status: "achieved",
-    progress: 92,
-    target: 100,
-    actual: 92,
-    totalScore: 38,
-    plannedScore: 36.0,
-    actualScore: 34.8,
-    startDate: "01-Apr-25",
-    endDate: "31-Dec-25",
-    department: "Customer Success"
-  },
-  {
-    id: "3",
-    title: "Improve Internal Operational Efficiency by Q4",
-    owner: "John Doe",
-    status: "in-progress",
-    progress: 54,
-    target: 100,
-    actual: 54,
-    totalScore: 29,
-    plannedScore: 31.3,
-    actualScore: 27.1,
-    startDate: "10-Jun-25",
-    endDate: "31-Mar-26",
-    department: "Operations"
-  }
-];
-
-export function OKRTable() {
-  const [okrData, setOkrData] = useState<OKRData[]>(mockOKRData);
+interface Props { view?: "all" | "my" | "company" }
+export function OKRTable({ view = "all" }: Props) {
+  // Seed from mockData and keep a local mutable copy for interactions
+  const [objectives, setObjectives] = useState<Objective[]>(seedObjectives);
+  // Provide a flattened view for the table's existing columns
+  const okrData: FlatOKR[] = objectives.map(o => ({
+    id: o.id,
+    title: o.title,
+    owner: o.owner,
+    status: (o.status ?? "pending") as FlatOKR["status"],
+    progress: o.progress ?? 0,
+    target: o.target ?? 0,
+    actual: o.actual ?? 0,
+    totalScore: o.totalScore ?? 0,
+    plannedScore: o.plannedScore ?? 0,
+    actualScore: o.actualScore ?? 0,
+    startDate: o.startDate ?? "",
+    endDate: o.endDate ?? "",
+    department: o.department ?? "General",
+    ref: o,
+  }));
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [timeframe, setTimeframe] = useState('quarterly');
   const { user } = useAuth();
 
-  // Register chart elements once
-  ChartJS.register(ArcElement, Tooltip, Legend);
+  // Charts removed: donut progress chart column was removed per requirement
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRequestOpen, setIsRequestOpen] = useState(false);
-  const [requestTitle, setRequestTitle] = useState("");
-  const [requestDesc, setRequestDesc] = useState("");
+  const [expandedObjectiveIds, setExpandedObjectiveIds] = useState<Record<string, boolean>>({});
+  const [addMilestoneFor, setAddMilestoneFor] = useState<{ objId: string; krId: string } | null>(null);
+  const [newMsTitle, setNewMsTitle] = useState("");
+  const [newMsFiles, setNewMsFiles] = useState<File[]>([]);
 
   const getStatusBadge = (status: string) => {
     const statusMap = {
@@ -146,8 +111,14 @@ export function OKRTable() {
                          okr.owner.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || okr.status === statusFilter;
     const matchesDepartment = departmentFilter === "all" || okr.department === departmentFilter;
+    const currentUserId = (user as any)?.id;
+    const ceoId = "ceo-1";
+    const matchesView =
+      view === "all" ||
+      (view === "my" && okr.owner === currentUserId) ||
+      (view === "company" && okr.owner === ceoId);
     
-    return matchesSearch && matchesStatus && matchesDepartment;
+    return matchesSearch && matchesStatus && matchesDepartment && matchesView;
   });
 
   const departments = [...new Set(okrData.map(okr => okr.department))];
@@ -159,6 +130,9 @@ export function OKRTable() {
     headers: exportPayload.headers,
     filename: "OKR_Export.csv",
   };
+
+  const canCreate = canCreateObjective(user as any);
+  const canRequest = canRequestObjective(user as any);
 
   return (
     <Card className="card-elevated">
@@ -181,12 +155,13 @@ export function OKRTable() {
                 Export
               </Button>
             </CSVLink>
-            {user?.role === 'ceo' ? (
+            {canCreate && (
               <Button size="sm" className="gap-2" onClick={() => setIsModalOpen(true)}>
                 <Plus className="w-4 h-4" />
                 Add OKR
               </Button>
-            ) : (
+            )}
+            {!canCreate && canRequest && (
               <Button size="sm" variant="default" className="gap-2" onClick={() => setIsRequestOpen(true)}>
                 <Plus className="w-4 h-4" />
                 Request Objective
@@ -262,10 +237,10 @@ export function OKRTable() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         onSubmit={({ objectiveTitle, dateRange, owner }) => {
-          const newObj: OKRData = {
-            id: (okrData.length + 1).toString(),
+          const newObj: Objective = {
+            id: (objectives.length + 1).toString(),
             title: objectiveTitle,
-            owner: owner || "Unassigned",
+            owner: owner || (user?.id ?? ""),
             status: "pending",
             progress: 0,
             target: 100,
@@ -276,52 +251,12 @@ export function OKRTable() {
             startDate: dateRange.start || "",
             endDate: dateRange.end || "",
             department: "General",
+            keyResults: [],
           };
-          setOkrData(prev => [newObj, ...prev]);
+          setObjectives(prev => [newObj, ...prev]);
         }}
       />
-
-      {/* Request Objective Modal for non-CEO users */}
-      <Dialog open={isRequestOpen} onOpenChange={setIsRequestOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Request New Objective</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-card-foreground">Objective Title</label>
-              <Input
-                placeholder="e.g., Improve customer NPS"
-                value={requestTitle}
-                onChange={(e) => setRequestTitle(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-card-foreground">Description</label>
-              <Textarea
-                placeholder="Add a short description for your request"
-                value={requestDesc}
-                onChange={(e) => setRequestDesc(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => {
-                // In a real app this would submit to an approval workflow
-                setIsRequestOpen(false);
-                setRequestTitle("");
-                setRequestDesc("");
-              }}
-              disabled={!requestTitle.trim()}
-            >
-              Submit Request
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RequestObjectiveModal open={isRequestOpen} onOpenChange={setIsRequestOpen} />
 
       <div className="overflow-x-auto max-w-full">
         <Table>
@@ -331,7 +266,6 @@ export function OKRTable() {
               <TableHead className="font-semibold">Owner</TableHead>
               <TableHead className="font-semibold">Status</TableHead>
               <TableHead className="font-semibold">Progress</TableHead>
-              <TableHead className="font-semibold text-center">Progress Chart</TableHead>
               <TableHead className="font-semibold text-center">Target</TableHead>
               <TableHead className="font-semibold text-center">Actual</TableHead>
               <TableHead className="font-semibold text-center">Total Score</TableHead>
@@ -345,9 +279,16 @@ export function OKRTable() {
             {filteredData.map((okr) => (
               <TableRow key={okr.id} className="hover:bg-muted/20 transition-colors">
                 <TableCell className="font-medium max-w-xs">
-                  <div className="truncate" title={okr.title}>
-                    {okr.title}
-                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="truncate cursor-help" title={okr.title}>
+                        {okr.title}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="start" className="max-w-md whitespace-pre-wrap break-words">
+                      {okr.title}
+                    </TooltipContent>
+                  </Tooltip>
                   <div className="text-xs text-muted-foreground mt-1">
                     {okr.department}
                   </div>
@@ -376,35 +317,7 @@ export function OKRTable() {
                     </div>
                   </div>
                 </TableCell>
-                {/* Progress Chart */}
-                <TableCell className="text-center">
-                  <div className="w-12 h-12 mx-auto">
-                    {(() => {
-                      const achieved = Math.max(0, Math.min(okr.actualScore, okr.totalScore));
-                      const remaining = Math.max(0, okr.totalScore - achieved);
-                      const chartData = {
-                        labels: ["Achieved", "Remaining"],
-                        datasets: [
-                          {
-                            data: [achieved, remaining],
-                            backgroundColor: ["#34D399", "#E5E7EB"],
-                            borderWidth: 0,
-                          },
-                        ],
-                      };
-                      const chartOptions = {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: "60%",
-                        plugins: {
-                          legend: { display: false },
-                          tooltip: { enabled: false },
-                        },
-                      };
-                      return <Doughnut data={chartData as any} options={chartOptions as any} />;
-                    })()}
-                  </div>
-                </TableCell>
+                
                 <TableCell className="text-center font-medium">{okr.target}</TableCell>
                 <TableCell className="text-center font-medium">{okr.actual}</TableCell>
                 <TableCell className="text-center font-bold">{okr.totalScore}</TableCell>
@@ -435,6 +348,110 @@ export function OKRTable() {
             ))}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Expandable section for KRs and milestones */}
+      <div className="px-4 pb-6">
+        {objectives.map((obj) => (
+          <div key={obj.id} className="border-t border-card-border pt-4 mt-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium text-card-foreground">Key Results for: {obj.title}</div>
+              <Button variant="ghost" size="sm" onClick={() => setExpandedObjectiveIds(prev => ({...prev, [obj.id]: !prev[obj.id]}))}>
+                {expandedObjectiveIds[obj.id] ? "Hide" : "Show"}
+              </Button>
+            </div>
+            {expandedObjectiveIds[obj.id] && (
+              <div className="mt-3 space-y-3">
+                {obj.keyResults.map((kr) => (
+                  <div key={kr.id} className={`rounded-md border border-card-border p-3 ${getStatusBorder(kr.status)}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{kr.title}</div>
+                        <div className="text-xs text-muted-foreground">Owner: {kr.owner}</div>
+                      </div>
+                      {canAddMilestone(user as any, kr) && (
+                        <Button size="sm" onClick={() => { setAddMilestoneFor({ objId: obj.id, krId: kr.id }); setNewMsTitle(""); }}>Add Milestone</Button>
+                      )}
+                    </div>
+                    {/* Milestones */}
+                    <div className="mt-3 space-y-2">
+                      {kr.milestones.map((ms) => {
+                        const canEdit = canUpdateMilestone(user as any, ms, kr, orgChartUsers);
+                        return (
+                          <div key={ms.id} className={`flex items-center gap-3 text-sm ${getStatusBorder(ms.status)}`}>
+                            <div className="flex-1">{ms.title}</div>
+                            <Select value={ms.status} onValueChange={(val) => {
+                              if (!canEdit) return;
+                              setObjectives(prev => prev.map(o => o.id !== obj.id ? o : ({
+                                ...o,
+                                keyResults: o.keyResults.map(k => k.id !== kr.id ? k : ({
+                                  ...k,
+                                  milestones: k.milestones.map(m => m.id !== ms.id ? m : ({...m, status: val as Milestone["status"]}))
+                                }))
+                              })));
+                            }} disabled={!canEdit}>
+                              <SelectTrigger className="w-36">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="To-Do">To-Do</SelectItem>
+                                <SelectItem value="In Progress">In Progress</SelectItem>
+                                <SelectItem value="Done">Done</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        );
+                      })}
+                      {/* Add Milestone inline form */}
+                      {addMilestoneFor && addMilestoneFor.objId === obj.id && addMilestoneFor.krId === kr.id && (
+                        <div className="mt-2 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Input placeholder="New milestone title" value={newMsTitle} onChange={(e) => setNewMsTitle(e.target.value)} />
+                            <input
+                              type="file"
+                              multiple
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files || []);
+                                setNewMsFiles(files);
+                              }}
+                            />
+                            <Button
+                              onClick={() => {
+                                if (!newMsTitle.trim()) return;
+                                const attachments: Attachment[] = newMsFiles.map(f => ({ name: f.name, size: f.size, type: f.type }));
+                                setObjectives(prev => prev.map(o => o.id !== obj.id ? o : ({
+                                  ...o,
+                                  keyResults: o.keyResults.map(k => k.id !== kr.id ? k : ({
+                                    ...k,
+                                    milestones: [...k.milestones, { id: `m${k.milestones.length+1}`, title: newMsTitle.trim(), status: "To-Do", attachments }]
+                                  }))
+                                })));
+                                setAddMilestoneFor(null);
+                                setNewMsTitle("");
+                                setNewMsFiles([]);
+                              }}
+                            >Add</Button>
+                            <Button variant="ghost" onClick={() => { setAddMilestoneFor(null); setNewMsTitle(""); setNewMsFiles([]); }}>Cancel</Button>
+                          </div>
+                          {!!newMsFiles.length && (
+                            <div className="text-xs text-muted-foreground flex flex-wrap gap-2">
+                              {newMsFiles.map((f, idx) => (
+                                <div key={idx} className="px-2 py-1 bg-muted rounded flex items-center gap-1">
+                                  <span>{f.name}</span>
+                                  <button className="text-danger" onClick={() => setNewMsFiles(prev => prev.filter((_, i) => i !== idx))}>×</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       {filteredData.length === 0 && (

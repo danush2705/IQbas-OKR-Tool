@@ -93,14 +93,15 @@ export default function LoginPage() {
             </div>
           </form>
 
-          <div className="mt-6 text-xs text-muted-foreground">
-            <div>Use one of the mock accounts:</div>
-            <ul className="mt-1 space-y-1">
-              <li>ceo@iqbas.org</li>
-              <li>manager@iqbas.org</li>
-              <li>user@iqbas.org</li>
-            </ul>
-          </div>
+            <div className="mt-6 text-xs text-muted-foreground">
+              <div>Use one of the mock accounts:</div>
+              <ul className="mt-1 space-y-1">
+                <li>ceo@iqbas.org</li>
+                <li>manager@iqbas.org</li>
+                <li>user@iqbas.org</li>
+                <li>hr@iqbas.org</li>
+              </ul>
+            </div>
         </Card>
       </div>
     </div>
